@@ -21,7 +21,7 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{51258a28-839e-4ddf-b5f8-bbca11d05a22}</ProjectGuid>
+    <ProjectGuid>{EFF66B81-ED2C-21D0-9D10-4AD1B29DF8F6}</ProjectGuid>
     <RootNamespace>MmAudioPlayer</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -194,6 +194,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AudioDefine.h" />
     <ClInclude Include="CAudioFile.h" />
     <ClInclude Include="CAudioInstance.h" />
     <ClInclude Include="CAudioPlayer.h" />

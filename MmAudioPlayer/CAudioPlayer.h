@@ -5,16 +5,21 @@
 class CAudioPlayer
 {
 public:
-    constexpr static size_t DefaultBufferCount = 44100 * 2 * 100 / 1000;
+    constexpr static size_t DefaultBufferCount = 44100 * 2 * 50 / 1000;
     constexpr static size_t BufferQueueSize = 2;
 private:
     HWAVEOUT m_hWaveOut{};
+
     std::vector<RefPtr<CAudioInstance>> m_vInstance{};
-    eck::CTrivialBuffer<INT16> m_vBuffer{};
     BOOLEAN m_bPlaying{};
-    WAVEHDR m_WaveHeader[BufferQueueSize]{};
+
     eck::CEvent m_Event{};
     eck::CWaitableObject m_Thread{};
+
+    // 以下字段仅由音频线程访问
+
+    WAVEHDR m_WaveHeader[BufferQueueSize]{};
+    INT16 m_Buffer[BufferQueueSize][DefaultBufferCount]{};
 
     void WaveThread() noexcept;
 

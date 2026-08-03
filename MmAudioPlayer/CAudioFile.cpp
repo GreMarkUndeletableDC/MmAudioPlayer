@@ -66,19 +66,20 @@ static MMRESULT ConvertAudioFormat(
 }
 
 
-W32ERR CAudioFile::LoadFromFile(_In_z_ PCWSTR pszFilePath) noexcept
+AudioError CAudioFile::LoadFromFile(_In_z_ PCWSTR pszFilePath) noexcept
 {
     NTSTATUS nts;
     const auto rb = eck::ReadInFile(pszFilePath, &nts);
     if (!NT_SUCCESS(nts))
-        return WIN32_FROM_NTSTATUS(nts);
+        return { AudioResult::File, nts };
     return LoadFromMemory(rb.Data(), rb.Size());
 }
 
-W32ERR CAudioFile::LoadFromMemory(
+AudioError CAudioFile::LoadFromMemory(
     _In_reads_bytes_(cbData) PCVOID pData,
     size_t cbData) noexcept try
 {
+    MMRESULT mmr;
     eck::CMemoryReader r{ pData, cbData };
 
     RIFF_HEADER const* pRiffHeader;
@@ -95,15 +96,15 @@ W32ERR CAudioFile::LoadFromMemory(
 
         Tag::CMpeg Mpeg{ File };
         if (Mpeg.Read() != Tag::Result::Ok)
-            return ERROR_BAD_FORMAT;
+            return { AudioResult::BadFormat };
 
         const auto& Info = Mpeg.GetInformation();
         if (Info.eLayer != Tag::CMpeg::Layer::Layer3)
-            return ERROR_BAD_FORMAT;
+            return { AudioResult::BadFormat };
         const auto nBitrateKbps = Mpeg.GetBitrate();
         const auto nSampleRate = Mpeg.GetSampleRate();
         if (!nBitrateKbps || !nSampleRate)
-            return ERROR_BAD_FORMAT;
+            return { AudioResult::BadFormat };
         const auto nBitrateBps = nBitrateKbps * 1000;
 
         MPEGLAYER3WAVEFORMAT Mp3Format{};
@@ -124,21 +125,52 @@ W32ERR CAudioFile::LoadFromMemory(
         // 计算帧字节大小
         // MPEG-1       (144 * Bitrate) / SampleRate
         // MPEG-2/2.5   ( 72 * Bitrate) / SampleRate
-        const DWORD nCoeff = (Info.eVersion == Tag::CMpeg::Version::Mpeg1) ? 144 : 72;
-        DWORD cbBlock = (nCoeff * nBitrateBps) / nSampleRate;
+        const auto nCoeff = (Info.eVersion == Tag::CMpeg::Version::Mpeg1) ? 144 : 72;
+        auto cbBlock = (nCoeff * nBitrateBps) / nSampleRate;
         if (Info.bPadding)
             cbBlock += 1;// 如果有Padding位，通常物理帧会多出1字节
         Mp3Format.nBlockSize = (WORD)cbBlock;
 
         eck::CByteBuffer rb{};
-        ConvertAudioFormat(
-            &Mp3Format.wfx,
-            &DefaultWaveFormat,
-            (PCBYTE)pData + Mpeg.GetBeginPosition(),
-            cbData - Mpeg.GetBeginPosition(),
-            rb);
+        if (Mp3Format.wfx.nSamplesPerSec != DefaultWaveFormat.nSamplesPerSec)
+        {
+            auto TempFormat{ DefaultWaveFormat };
+            TempFormat.nSamplesPerSec = Mp3Format.wfx.nSamplesPerSec;
+            TempFormat.nAvgBytesPerSec = TempFormat.nSamplesPerSec * TempFormat.nBlockAlign;
+
+            eck::CByteBuffer rbTemp{};
+            mmr = ConvertAudioFormat(
+                &Mp3Format.wfx,
+                &TempFormat,
+                (PCBYTE)pData + Mpeg.GetBeginPosition(),
+                cbData - Mpeg.GetBeginPosition(),
+                rbTemp);
+            if (mmr != MMSYSERR_NOERROR)
+                return { AudioResult::AcmConvert, mmr };
+
+            mmr = ConvertAudioFormat(
+                &TempFormat,
+                &DefaultWaveFormat,
+                rbTemp.Data(),
+                rbTemp.Size(),
+                rb);
+            if (mmr != MMSYSERR_NOERROR)
+                return { AudioResult::AcmConvert, mmr };
+        }
+        else
+        {
+            mmr = ConvertAudioFormat(
+                &Mp3Format.wfx,
+                &DefaultWaveFormat,
+                (PCBYTE)pData + Mpeg.GetBeginPosition(),
+                cbData - Mpeg.GetBeginPosition(),
+                rb);
+            if (mmr != MMSYSERR_NOERROR)
+                return { AudioResult::AcmConvert, mmr };
+        }
+
         m_rbWave = std::move(rb);
-        return ERROR_SUCCESS;
+        return { AudioResult::Ok };
     }
 
     char ChunkId[4];
@@ -146,11 +178,15 @@ W32ERR CAudioFile::LoadFromMemory(
 
     WAVEFORMATEX Format{};
     PCVOID pData{};
+    UINT cbData{};
     while (!r.IsEnd())
     {
         r >> ChunkId >> cbChunk;
         if (memcmp(ChunkId, "data", 4) == 0)
+        {
             pData = r.Data();
+            cbData = cbChunk;
+        }
         else if (memcmp(ChunkId, "fmt ", 4) == 0)
         {
             const auto* const pFormat = (WAVEFORMATEX*)r.Data();
@@ -160,21 +196,31 @@ W32ERR CAudioFile::LoadFromMemory(
     }
 
     if (!pData || Format.wFormatTag != WAVE_FORMAT_PCM)
-        return ERROR_BAD_FORMAT;
+        return { AudioResult::BadFormat };
+    if (cbData > 512 * 1024 * 1024)
+        return { AudioResult::TooLarge };
 
     if (memcmp(&DefaultWaveFormat, &Format, 16) == 0)
     {
-        m_rbWave.Assign(pData, cbChunk);
+        m_rbWave.ReSize(cbChunk);
+        memcpy(m_rbWave.Data(), pData, cbChunk);
     }
     else
     {
         eck::CByteBuffer rb{};
-        ConvertAudioFormat(&Format, &DefaultWaveFormat, pData, cbChunk, rb);
+        mmr = ConvertAudioFormat(
+            &Format,
+            &DefaultWaveFormat,
+            pData,
+            cbChunk,
+            rb);
+        if (mmr != MMSYSERR_NOERROR)
+            return { AudioResult::AcmConvert, mmr };
         m_rbWave = std::move(rb);
     }
-    return ERROR_SUCCESS;
+    return { AudioResult::Ok };
 }
-catch (const eck::CMemoryReader::Xpt& e)
+catch (const eck::CMemoryReader::Xpt&)
 {
-    return ERROR_BAD_FORMAT;
+    return { AudioResult::BadFormat };
 }

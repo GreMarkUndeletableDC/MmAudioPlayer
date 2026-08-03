@@ -1,4 +1,8 @@
 ﻿#pragma once
+#include "AudioDefine.h"
+
+// 表示一个固定DefaultWaveFormat格式的PCM字节流
+// 注意本类加载完毕后只读，二次加载时必须确认未被播放器选入
 class CAudioFile
 {
 public:
@@ -14,18 +18,19 @@ public:
 private:
     eck::CByteBuffer m_rbWave{};
 public:
-    W32ERR LoadFromFile(_In_z_ PCWSTR pszFilePath) noexcept;
-    W32ERR LoadFromMemory(
+    AudioError LoadFromFile(_In_z_ PCWSTR pszFilePath) noexcept;
+
+    AudioError LoadFromMemory(
         _In_reads_bytes_(cbData) PCVOID pData,
         size_t cbData) noexcept;
 
-    UINT GetSampleCount() const noexcept
+    EckInlineNdCe UINT GetSampleCount() const noexcept
     {
-        return m_rbWave.Size() / DefaultWaveFormat.nBlockAlign;
+        return UINT(m_rbWave.Size() / DefaultWaveFormat.nBlockAlign);
     }
 
-    UINT16* GetData() noexcept
+    EckInlineNdCe const UINT16* GetData() const noexcept
     {
-        return (UINT16*)m_rbWave.Data();
+        return (const UINT16*)m_rbWave.Data();
     }
 };

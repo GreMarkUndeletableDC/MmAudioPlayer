@@ -24,7 +24,7 @@ void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
 {
     BOOL bActive{};
 
-    const auto pBuffer = m_vBuffer.Data() + idxQueue * DefaultBufferCount;
+    const auto pBuffer = m_Buffer[idxQueue];
     const auto cbBuffer = DefaultBufferCount * sizeof(INT16);
     RtlZeroMemory(pBuffer, cbBuffer);
     for (const auto& pInst : m_vInstance)
@@ -81,8 +81,6 @@ MMRESULT CAudioPlayer::Initialize() noexcept
         m_hWaveOut = nullptr;
         return mmr;
     }
-
-    m_vBuffer.ReSize(DefaultBufferCount * BufferQueueSize);
 
     m_Thread.Attach(eck::CrtCreateThread([](void* p) noexcept -> UINT
         {
