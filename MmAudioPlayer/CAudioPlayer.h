@@ -12,7 +12,9 @@ private:
 
     std::vector<RefPtr<CAudioInstance>> m_vInstance{};
     BOOLEAN m_bPlaying{};
+    BOOLEAN m_bExit{};
 
+    eck::CSrwLock m_Lock{};
     eck::CEvent m_Event{};
     eck::CWaitableObject m_Thread{};
 
@@ -31,6 +33,9 @@ public:
     MMRESULT Uninitialize() noexcept;
 
     RefPtr<CAudioInstance> AddInstance(RefPtr<CAudioFile> pFile) noexcept;
+    BOOL RemoveInstance(const RefPtr<CAudioInstance>& pInstance) noexcept;
 
     EckInlineNdCe BOOL IsValid() const noexcept { return !!m_hWaveOut; }
+
+    EckInlineNdCe auto& GetLock() noexcept { return m_Lock; }
 };

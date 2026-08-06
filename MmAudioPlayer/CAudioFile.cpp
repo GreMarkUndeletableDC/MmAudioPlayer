@@ -18,10 +18,10 @@ static MMRESULT ConvertAudioFormat(
     size_t cbIn,
     eck::CByteBuffer& rbOut) noexcept
 {
-    MMRESULT mr;
+    MMRESULT mmr;
     HACMSTREAM hAcmStream;
 
-    mr = acmStreamOpen(
+    mmr = acmStreamOpen(
         &hAcmStream,
         nullptr,
         (WAVEFORMATEX*)pFmtIn,
@@ -30,8 +30,8 @@ static MMRESULT ConvertAudioFormat(
         0,
         0,
         ACM_STREAMOPENF_NONREALTIME);
-    if (mr != MMSYSERR_NOERROR)
-        return mr;
+    if (mmr != MMSYSERR_NOERROR)
+        return mmr;
 
     eck::CScopeGuard Guard{ [&]() noexcept
         {
@@ -39,9 +39,9 @@ static MMRESULT ConvertAudioFormat(
         } };
 
     DWORD cbOut;
-    mr = acmStreamSize(hAcmStream, (DWORD)cbIn, &cbOut, ACM_STREAMSIZEF_SOURCE);
-    if (mr != MMSYSERR_NOERROR)
-        return mr;
+    mmr = acmStreamSize(hAcmStream, (DWORD)cbIn, &cbOut, ACM_STREAMSIZEF_SOURCE);
+    if (mmr != MMSYSERR_NOERROR)
+        return mmr;
 
     rbOut.ReSize(cbOut);
 
@@ -53,16 +53,16 @@ static MMRESULT ConvertAudioFormat(
         .pbDst = rbOut.Data(),
         .cbDstLength = cbOut,
     };
-    mr = acmStreamPrepareHeader(hAcmStream, &StreamHeader, 0);
-    if (mr != MMSYSERR_NOERROR)
-        return mr;
-    mr = acmStreamConvert(hAcmStream, &StreamHeader,
+    mmr = acmStreamPrepareHeader(hAcmStream, &StreamHeader, 0);
+    if (mmr != MMSYSERR_NOERROR)
+        return mmr;
+    mmr = acmStreamConvert(hAcmStream, &StreamHeader,
         ACM_STREAMCONVERTF_START | ACM_STREAMCONVERTF_END);
     acmStreamUnprepareHeader(hAcmStream, &StreamHeader, 0);
-    if (mr == MMSYSERR_NOERROR)
+    if (mmr == MMSYSERR_NOERROR)
         rbOut.ReSize(StreamHeader.cbDstLengthUsed);
 
-    return mr;
+    return mmr;
 }
 
 
@@ -79,6 +79,10 @@ AudioError CAudioFile::LoadFromMemory(
     _In_reads_bytes_(cbData) PCVOID pData,
     size_t cbData) noexcept try
 {
+    const eck::CSrwWriteGuard _{ m_Lock };
+    if (m_cSelected)
+        return { AudioResult::Busy };
+
     MMRESULT mmr;
     eck::CMemoryReader r{ pData, cbData };
 
@@ -177,15 +181,15 @@ AudioError CAudioFile::LoadFromMemory(
     UINT cbChunk;
 
     WAVEFORMATEX Format{};
-    PCVOID pData{};
-    UINT cbData{};
+    PCVOID pPcm{};
+    UINT cbPcm{};
     while (!r.IsEnd())
     {
         r >> ChunkId >> cbChunk;
         if (memcmp(ChunkId, "data", 4) == 0)
         {
-            pData = r.Data();
-            cbData = cbChunk;
+            pPcm = r.Data();
+            cbPcm = cbChunk;
         }
         else if (memcmp(ChunkId, "fmt ", 4) == 0)
         {
@@ -195,25 +199,20 @@ AudioError CAudioFile::LoadFromMemory(
         r += cbChunk;
     }
 
-    if (!pData || Format.wFormatTag != WAVE_FORMAT_PCM)
+    if (!pPcm || Format.wFormatTag != WAVE_FORMAT_PCM)
         return { AudioResult::BadFormat };
-    if (cbData > 512 * 1024 * 1024)
+    if (cbPcm > 512 * 1024 * 1024)
         return { AudioResult::TooLarge };
 
     if (memcmp(&DefaultWaveFormat, &Format, 16) == 0)
     {
-        m_rbWave.ReSize(cbChunk);
-        memcpy(m_rbWave.Data(), pData, cbChunk);
+        m_rbWave.ReSize(cbPcm);
+        memcpy(m_rbWave.Data(), pPcm, cbPcm);
     }
     else
     {
         eck::CByteBuffer rb{};
-        mmr = ConvertAudioFormat(
-            &Format,
-            &DefaultWaveFormat,
-            pData,
-            cbChunk,
-            rb);
+        mmr = ConvertAudioFormat(&Format, &DefaultWaveFormat, pPcm, cbPcm, rb);
         if (mmr != MMSYSERR_NOERROR)
             return { AudioResult::AcmConvert, mmr };
         m_rbWave = std::move(rb);
@@ -223,4 +222,16 @@ AudioError CAudioFile::LoadFromMemory(
 catch (const eck::CMemoryReader::Xpt&)
 {
     return { AudioResult::BadFormat };
+}
+
+size_t CAudioFile::Select() noexcept
+{
+    const eck::CSrwWriteGuard _{ m_Lock };
+    return ++m_cSelected;
+}
+
+size_t CAudioFile::Deselect() noexcept
+{
+    const eck::CSrwWriteGuard _{ m_Lock };
+    return --m_cSelected;
 }

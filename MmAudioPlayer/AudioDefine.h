@@ -7,6 +7,7 @@ enum class AudioResult
     WaveOut,
     File,       // NTSTATUS
     TooLarge,
+    Busy,
 };
 
 struct AudioError

@@ -16,13 +16,19 @@ public:
         .wBitsPerSample = 16,
     };
 private:
+    eck::CSrwLock m_Lock{};
     eck::CByteBuffer m_rbWave{};
+    size_t m_cSelected{};
 public:
     AudioError LoadFromFile(_In_z_ PCWSTR pszFilePath) noexcept;
 
     AudioError LoadFromMemory(
         _In_reads_bytes_(cbData) PCVOID pData,
         size_t cbData) noexcept;
+
+    // --
+    // 以下读取方法在选入后可用
+    // 如果在选入前调用，调用方负责与加载操作同步
 
     EckInlineNdCe UINT GetSampleCount() const noexcept
     {
@@ -33,4 +39,9 @@ public:
     {
         return (const UINT16*)m_rbWave.Data();
     }
+
+    // --
+
+    size_t Select() noexcept;
+    size_t Deselect() noexcept;
 };
