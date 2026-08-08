@@ -27,12 +27,13 @@ void CAudioPlayer::WaveThread() noexcept
 
 void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
 {
-    const eck::CSrwWriteGuard _{ m_Lock };
     BOOL bActive{};
 
     const auto pBuffer = m_Buffer[idxQueue];
     const auto cbBuffer = DefaultBufferCount * sizeof(INT16);
     RtlZeroMemory(pBuffer, cbBuffer);
+
+    m_Lock.EnterWrite();
     for (auto& Inst : m_vInstance)
     {
         if (Inst.eState != State::Playing)
@@ -56,8 +57,9 @@ void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
             pBuffer[i * 2 + 1] = (INT16)std::clamp(r, -32768, 32767);
         }
     }
-
     m_bPlaying = bActive;
+    m_Lock.LeaveWrite();
+
     auto& Wave = m_WaveHeader[idxQueue];
     if (bActive)
     {
