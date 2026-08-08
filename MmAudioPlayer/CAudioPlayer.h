@@ -4,14 +4,26 @@
 class CAudioPlayer
 {
 public:
+    enum class EventResult
+    {
+        Remove,
+        Stop,
+        Loop
+    };
+
+    // 播放完毕后调用，返回TRUE移除此实例
+    // 调用方不得在回调内调用CAudioPlayer或执行任何耗时操作
+    using FCallback = EventResult(*)(UINT idInst, void* pUser);
+
     constexpr static size_t DefaultBufferCount = 44100 * 2 * 50 / 1000;
-    constexpr static size_t BufferQueueSize = 4;
+    constexpr static size_t BufferQueueSize = 3;
 
     enum class State : BYTE
     {
         Invalid,
         Playing,
         Paused,
+        Stoped,
     };
 
     struct INST_PARAM
@@ -40,6 +52,9 @@ private:
     eck::CEvent m_Event{};
     eck::CWaitableObject m_Thread{};
 
+    FCallback m_pfnCallback{};
+    void* m_pUser{};
+
     // 以下字段仅由音频线程访问
 
     WAVEHDR m_WaveHeader[BufferQueueSize]{};
@@ -48,6 +63,8 @@ private:
     void WaveThread() noexcept;
 
     void MixAudio(size_t idxQueue) noexcept;
+
+    void InternalRemoveInstance(UINT id) noexcept;
 public:
     ECK_DISABLE_COPY_MOVE_DEF_CONS(CAudioPlayer)
 public:
@@ -67,7 +84,11 @@ public:
     }
     UINT InstAdd(const INST_PARAM& Param) noexcept;
 
-    void InstRemove(UINT id) noexcept;
+    void InstRemove(UINT id) noexcept
+    {
+        const eck::CSrwWriteGuard _{ m_Lock };
+        InternalRemoveInstance(id);
+    }
 
     void InstPause(UINT id) noexcept
     {
@@ -98,5 +119,12 @@ public:
     {
         const eck::CSrwReadGuard _{ m_Lock };
         return m_vInstance[id].eState;
+    }
+
+    void SetCallback(FCallback pfnCallback, void* pUser) noexcept
+    {
+        const eck::CSrwWriteGuard _{ m_Lock };
+        m_pfnCallback = pfnCallback;
+        m_pUser = pUser;
     }
 };

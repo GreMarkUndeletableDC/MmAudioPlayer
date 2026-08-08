@@ -27,7 +27,7 @@ void CAudioPlayer::WaveThread() noexcept
 
 void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
 {
-    BOOL bActive{};
+    BOOL bActive{}, bRemoveTail{};
 
     const auto pBuffer = m_Buffer[idxQueue];
     const auto cbBuffer = DefaultBufferCount * sizeof(INT16);
@@ -47,7 +47,7 @@ void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
         if (cSample)
             bActive = TRUE;
 
-        for (UINT i = 0; i < cSample; ++i)
+        EckCounter(cSample, i)
         {
             const auto pSample = Inst.pFile->GetData() + (idxCurr + i) * 2;
 
@@ -56,8 +56,40 @@ void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
             pBuffer[i * 2] = (INT16)std::clamp(l, -32768, 32767);
             pBuffer[i * 2 + 1] = (INT16)std::clamp(r, -32768, 32767);
         }
+
+        if (Inst.idxCurrSample == cTotalSample)
+        {
+            if (m_pfnCallback)
+            {
+                const auto id = UINT(&Inst - m_vInstance.data());
+                const auto r = m_pfnCallback(id, m_pUser);
+                switch (r)
+                {
+                case EventResult::Remove:
+                    if (id == UINT(m_vInstance.size() - 1))
+                        bRemoveTail = TRUE;
+                    else
+                        InternalRemoveInstance(id);
+                    break;
+                case EventResult::Stop:
+                    Inst.eState = State::Stoped;
+                    [[fallthrough]];
+                case EventResult::Loop:
+                    Inst.idxCurrSample = 0u;
+                    break;
+                }
+
+            }
+            else
+            {
+                Inst.eState = State::Stoped;
+                Inst.idxCurrSample = 0u;
+            }
+        }
     }
     m_bPlaying = bActive;
+    if (bRemoveTail)
+        InternalRemoveInstance(UINT(m_vInstance.size() - 1));
     m_Lock.LeaveWrite();
 
     auto& Wave = m_WaveHeader[idxQueue];
@@ -71,6 +103,25 @@ void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
         Wave.lpData = nullptr;
         Wave.dwBufferLength = 0;
     }
+}
+
+void CAudioPlayer::InternalRemoveInstance(UINT id) noexcept
+{
+    auto pFile = std::move(m_vInstance[id].pFile);
+    if (id == m_vInstance.size() - 1)
+    {
+        do
+            m_vInstance.pop_back();
+        while (!m_vInstance.empty() &&
+            m_vInstance.back().eState == State::Invalid);
+        m_FreeRange.OnSetItemCount((int)m_vInstance.size());
+    }
+    else
+    {
+        m_vInstance[id].eState = State::Invalid;
+        m_FreeRange.IncludeItem((int)id);
+    }
+    pFile->Deselect();
 }
 
 MMRESULT CAudioPlayer::Initialize() noexcept
@@ -148,25 +199,4 @@ UINT CAudioPlayer::InstAdd(const INST_PARAM& Param) noexcept
     if (!m_bPlaying)
         m_Event.Signal();
     return id;
-}
-
-void CAudioPlayer::InstRemove(UINT id) noexcept
-{
-    m_Lock.EnterWrite();
-    auto pFile = std::move(m_vInstance[id].pFile);
-    if (id == m_vInstance.size() - 1)
-    {
-        do
-            m_vInstance.pop_back();
-        while (!m_vInstance.empty() &&
-            m_vInstance.back().eState == State::Invalid);
-        m_FreeRange.OnSetItemCount((int)m_vInstance.size());
-    }
-    else
-    {
-        m_vInstance[id].eState = State::Invalid;
-        m_FreeRange.IncludeItem((int)id);
-    }
-    m_Lock.LeaveWrite();
-    pFile->Deselect();
 }
