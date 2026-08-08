@@ -211,11 +211,9 @@ AudioError CAudioFile::LoadFromMemory(
     }
     else
     {
-        eck::CByteBuffer rb{};
-        mmr = ConvertAudioFormat(&Format, &DefaultWaveFormat, pPcm, cbPcm, rb);
+        mmr = ConvertAudioFormat(&Format, &DefaultWaveFormat, pPcm, cbPcm, m_rbWave);
         if (mmr != MMSYSERR_NOERROR)
             return { AudioResult::AcmConvert, mmr };
-        m_rbWave = std::move(rb);
     }
     return { AudioResult::Ok };
 }
