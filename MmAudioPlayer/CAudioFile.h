@@ -2,7 +2,6 @@
 #include "AudioDefine.h"
 
 // 表示一个固定DefaultWaveFormat格式的PCM字节流
-// 注意本类加载完毕后只读，二次加载时必须确认未被播放器选入
 class CAudioFile
 {
 public:
