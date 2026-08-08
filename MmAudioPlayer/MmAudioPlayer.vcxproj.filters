@@ -36,9 +36,6 @@
     <ClInclude Include="CAudioFile.h">
       <Filter>Player</Filter>
     </ClInclude>
-    <ClInclude Include="CAudioInstance.h">
-      <Filter>Player</Filter>
-    </ClInclude>
     <ClInclude Include="AudioDefine.h">
       <Filter>Player</Filter>
     </ClInclude>
@@ -57,9 +54,6 @@
       <Filter>Player</Filter>
     </ClCompile>
     <ClCompile Include="CAudioFile.cpp">
-      <Filter>Player</Filter>
-    </ClCompile>
-    <ClCompile Include="CAudioInstance.cpp">
       <Filter>Player</Filter>
     </ClCompile>
   </ItemGroup>

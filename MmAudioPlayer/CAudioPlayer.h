@@ -1,18 +1,40 @@
 ﻿#pragma once
 #include "CAudioFile.h"
-#include "CAudioInstance.h"
 
 class CAudioPlayer
 {
 public:
     constexpr static size_t DefaultBufferCount = 44100 * 2 * 50 / 1000;
-    constexpr static size_t BufferQueueSize = 2;
+    constexpr static size_t BufferQueueSize = 4;
+
+    enum class State : BYTE
+    {
+        Invalid,
+        Playing,
+        Paused,
+    };
+
+    struct INST_PARAM
+    {
+        RefPtr<CAudioFile> pFile{};
+        State eState{ State::Playing };
+        BYTE byVolume{ 255 };
+    };
 private:
+    struct Instance
+    {
+        RefPtr<CAudioFile> pFile{};
+        UINT idxCurrSample{};
+        State eState{};
+        BYTE byVolume{};
+    };
+
     HWAVEOUT m_hWaveOut{};
 
-    std::vector<RefPtr<CAudioInstance>> m_vInstance{};
+    std::vector<Instance> m_vInstance{};
+    eck::CSelectionRange m_FreeRange{};
     BOOLEAN m_bPlaying{};
-    BOOLEAN m_bExit{};
+    std::atomic<bool> m_bExit{};
 
     eck::CSrwLock m_Lock{};
     eck::CEvent m_Event{};
@@ -32,10 +54,49 @@ public:
     MMRESULT Initialize() noexcept;
     MMRESULT Uninitialize() noexcept;
 
-    RefPtr<CAudioInstance> AddInstance(RefPtr<CAudioFile> pFile) noexcept;
-    BOOL RemoveInstance(const RefPtr<CAudioInstance>& pInstance) noexcept;
+    EckInlineNd BOOL IsValid() noexcept
+    {
+        const eck::CSrwReadGuard _{ m_Lock };
+        return !!m_hWaveOut;
+    }
 
-    EckInlineNdCe BOOL IsValid() const noexcept { return !!m_hWaveOut; }
+    UINT InstAdd(RefPtr<CAudioFile> pFile) noexcept
+    {
+        const INST_PARAM Param{ std::move(pFile) };
+        return InstAdd(Param);
+    }
+    UINT InstAdd(const INST_PARAM& Param) noexcept;
 
-    EckInlineNdCe auto& GetLock() noexcept { return m_Lock; }
+    void InstRemove(UINT id) noexcept;
+
+    void InstPause(UINT id) noexcept
+    {
+        const eck::CSrwWriteGuard _{ m_Lock };
+        m_vInstance[id].eState = State::Paused;
+    }
+    void InstResume(UINT id) noexcept
+    {
+        const eck::CSrwWriteGuard _{ m_Lock };
+        m_vInstance[id].eState = State::Playing;
+        if (!m_bPlaying)
+            m_Event.Signal();
+    }
+
+    void InstSetVolume(UINT id, BYTE byVolume) noexcept
+    {
+        const eck::CSrwWriteGuard _{ m_Lock };
+        m_vInstance[id].byVolume = byVolume;
+    }
+
+    BYTE InstGetVolume(UINT id) noexcept
+    {
+        const eck::CSrwReadGuard _{ m_Lock };
+        return m_vInstance[id].byVolume;
+    }
+
+    State InstGetState(UINT id) noexcept
+    {
+        const eck::CSrwReadGuard _{ m_Lock };
+        return m_vInstance[id].eState;
+    }
 };

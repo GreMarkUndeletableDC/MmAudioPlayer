@@ -196,7 +196,6 @@
   <ItemGroup>
     <ClInclude Include="AudioDefine.h" />
     <ClInclude Include="CAudioFile.h" />
-    <ClInclude Include="CAudioInstance.h" />
     <ClInclude Include="CAudioPlayer.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
@@ -204,7 +203,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CAudioFile.cpp" />
-    <ClCompile Include="CAudioInstance.cpp" />
     <ClCompile Include="CAudioPlayer.cpp" />
     <ClCompile Include="Entry.cpp" />
     <ClCompile Include="MyEck.cpp" />

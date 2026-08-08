@@ -35,9 +35,9 @@ public:
         return UINT(m_rbWave.Size() / DefaultWaveFormat.nBlockAlign);
     }
 
-    EckInlineNdCe const UINT16* GetData() const noexcept
+    EckInlineNdCe const INT16* GetData() const noexcept
     {
-        return (const UINT16*)m_rbWave.Data();
+        return (const INT16*)m_rbWave.Data();
     }
 
     // --

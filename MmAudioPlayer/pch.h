@@ -8,9 +8,12 @@
 #include "eck\RefPtr.h"
 #include "eck\CEvent.h"
 #include "eck\MediaTagMpeg.h"
+#include "eck\CSelectionRange.h"
 
 #include <mmreg.h>
 #include <MSAcm.h>
+
+#include <thread>
 
 using eck::PCVOID;
 using eck::PCBYTE;

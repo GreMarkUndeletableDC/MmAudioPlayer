@@ -33,7 +33,7 @@ static MMRESULT ConvertAudioFormat(
     if (mmr != MMSYSERR_NOERROR)
         return mmr;
 
-    eck::CScopeGuard Guard{ [&]() noexcept
+    const eck::CScopeGuard Guard{ [&]() noexcept
         {
             acmStreamClose(hAcmStream, 0);
         } };
