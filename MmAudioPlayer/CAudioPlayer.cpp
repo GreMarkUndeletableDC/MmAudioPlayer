@@ -15,10 +15,7 @@ void CAudioPlayer::WaveThread() noexcept
             if (!(Wave.dwFlags & WHDR_DONE) && Wave.dwFlags)
                 continue;
             waveOutUnprepareHeader(m_hWaveOut, &Wave, sizeof(WAVEHDR));
-            {
-                const eck::CSrwWriteGuard _{ m_Lock };
-                MixAudio(i);
-            }
+            MixAudio(i);
             if (Wave.lpData)
             {
                 waveOutPrepareHeader(m_hWaveOut, &Wave, sizeof(WAVEHDR));
@@ -30,6 +27,7 @@ void CAudioPlayer::WaveThread() noexcept
 
 void CAudioPlayer::MixAudio(size_t idxQueue) noexcept
 {
+    const eck::CSrwWriteGuard _{ m_Lock };
     BOOL bActive{};
 
     const auto pBuffer = m_Buffer[idxQueue];
